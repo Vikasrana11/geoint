@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Simplified - Web Mapping Application</title>
+    <link rel="stylesheet" href="resources/v10.6.0/ol.css">
+    <link rel="stylesheet" href="resources/ol-layerswitcher-main/dist/ol-layerswitcher.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+        #layerSelect {
+            width: 200px;
+            height: 100px;
+        }
+        #advancedFiltersDiv {
+            display: none;
+            width: 100%;
+        }
+        .spinner {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .attQueryDiv {
+            position: absolute;
+            top: 80px;
+            right: 10px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 998;
+            width: 250px;
+        }
+        .attListDiv {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            max-height: 200px;
+            overflow: auto;
+            background: rgba(255, 255, 255, 0.95);
+            z-index: 997;
+        }
+        .ol-popup {
+            position: absolute;
+            background-color: white;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            bottom: 12px;
+            left: -50px;
+            min-width: 200px;
+        }
+        .ol-popup:after, .ol-popup:before {
+            top: 100%;
+            border: solid transparent;
+            content: " ";
+            height: 0;
+            width: 0;
+            position: absolute;
+            pointer-events: none;
+        }
+        .ol-popup-closer {
+            text-decoration: none;
+            position: absolute;
+            top: 2px;
+            right: 8px;
+        }
+        #layerManagementPanel {
+            display: none;
+            position: absolute;
+            top: 150px;
+            left: 300px;
+            width: 280px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            z-index: 999;
+        }
+        #layerManagementPanel.show {
+            display: block;
+        }
+        #stylePanel {
+            display: none;
+            position: absolute;
+            top: 150px;
+            left: 300px;
+            width: 280px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            z-index: 999;
+        }
+        #stylePanel.show {
+            display: block;
+        }
+        #summary {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            z-index: 998;
+            max-width: 30vw;
+            max-height: 40vh;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        #downloadKML {
+            position: absolute;
+            bottom: 60px;
+            right: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            z-index: 998;
+        }
+        #downloadKML:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        #downloadKML:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        #layerColorPickers {
+            margin-top: 10px;
+        }
+        .color-picker-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .color-picker-row label {
+            flex: 1;
+        }
+        .color-picker-row input[type="color"] {
+            width: 30px;
+            height: 30px;
+            margin-left: 10px;
+        }
+        @media (max-width: 768px) {
+            #summary {
+                max-width: 80vw;
+                max-height: 30vh;
+                bottom: 50px;
+                right: 5px;
+                font-size: 12px;
+            }
+            #downloadKML {
+                bottom: 10px;
+                right: 5px;
+                padding: 6px 10px;
+            }
+            .attQueryDiv {
+                top: 60px;
+                right: 5px;
+                width: 200px;
+            }
+            #layerManagementPanel, #stylePanel {
+                top: 100px;
+                left: 10px;
+                width: 90vw;
+            }
+        }
+        @media (max-width: 480px) {
+            #summary {
+                max-width: 90vw;
+                max-height: 25vh;
+                bottom: 45px;
+                right: 5px;
+                font-size: 10px;
+            }
+            #downloadKML {
+                bottom: 5px;
+                right: 5px;
+                padding: 5px 8px;
+            }
+            .attQueryDiv {
+                top: 50px;
+                right: 5px;
+                width: 180px;
+            }
+            #layerManagementPanel, #stylePanel {
+                top: 80px;
+                left: 5px;
+                width: 95vw;
+            }
+        }
+    </style>
+    <script src="resources/jszip.min.js"></script>
+</head>
+<body>
+    <div id="dateFilterPanel">
+        <h3 style="margin: 0 0 10px;">Filter Data</h3>
+        <div class="form-row">
+            <label for="layerSelect">Layers</label>
+            <select id="layerSelect" multiple>
+                <option value="lweinput">LWE Input</option>
+                <option value="jkinput">JK Input</option>
+                <option value="neinput">NE Input</option>
+                <option value="crpfdeployment">CRPF Deployment</option>
+                <option value="uavintercept">UAV Intercept</option>
+                <option value="crpfincident">CRPF Incident</option>
+            </select>
+        </div>
+        <div id="layerColorPickers"></div>
+        <div class="form-row">
+            <label for="startDateTop">Start Date</label>
+            <input type="date" id="startDateTop" />
+        </div>
+        <div class="form-row">
+            <label for="endDateTop">End Date</label>
+            <input type="date" id="endDateTop" />
+        </div>
+        <div class="form-row checkbox-row">
+            <input type="checkbox" id="advancedFilters" />
+            <label for="advancedFilters">Enable Advanced Filters</label>
+        </div>
+        <div id="advancedFiltersDiv">
+            <div class="form-row">
+                <label for="stateSelect">State</label>
+                <select id="stateSelect">
+                    <option value="">All States</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="districtSelect">District</label>
+                <select id="districtSelect">
+                    <option value="">All Districts</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row btn-row">
+            <button onclick="applyTopDateFilter()" class="apply-btn" disabled>Apply</button>
+            <button onclick="resetTopDateFilter()" class="reset-btn">Reset</button>
+            <div id="loadingSpinner" class="spinner"></div>
+        </div>
+    </div>
+    <button id="toggleFilterBtn" style="
+        position: absolute;
+        left: 10px;
+        bottom: 100px;
+        z-index: 999;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    ">🔍 Filter</button>
+    <div id="map"></div>
+    <div id="popup" class="ol-popup">
+        <a href="#" id="popup-closer" class="ol-popup-closer">✖</a>
+        <div id="popup-content"></div>
+    </div>
+    <div class="attQueryDiv" id="attQueryDiv">
+        <div class="headerDiv" id="headerDiv">
+            <label>Attribute Query</label>
+        </div><br>
+        <label for="selectLayer">Select Layer</label>
+        <select name="selectLayer" id="selectLayer"></select><br><br>
+        <label for="selectAttribute">Select Attribute</label>
+        <select name="selectAttribute" id="selectAttribute"></select><br><br>
+        <label for="selectOperator">Select Operator</label>
+        <select name="selectOperator" id="selectOperator"></select><br><br>
+        <label for="enterValue">Enter Value</label>
+        <input type="text" name="enterValue" id="enterValue"><br><br>
+        <button type="button" id="attQryRun" class="attQryRun" onclick="newaddGeoJsonToMap()">Run</button>
+    </div>
+    <div class="attListDiv" id="attListDiv"></div>
+    <input type="file" id="kmlFileInput" accept=".kml,.kmz,.gpx" multiple style="display: none;">
+    <div id="summary">No GPX files loaded.</div>
+    <button id="downloadKML" disabled>Download KML</button>
+    <div id="layerManagementPanel">
+        <h3>Layer Management</h3>
+        <label for="selectedLayer">Select Layer:</label>
+        <select id="selectedLayer"></select><br><br>
+        <button onclick="renameLayer()">Rename</button>
+        <button onclick="deleteLayer()">Delete</button>
+        <button onclick="closeLayerManagement()">Close</button>
+    </div>
+    <div id="stylePanel">
+        <h3>Style Customization</h3>
+        <label for="selectedStyleLayer">Select Layer:</label>
+        <select id="selectedStyleLayer"></select><br><br>
+        <label for="strokeColor">Stroke Color:</label>
+        <input type="color" id="strokeColor" value="#000000"><br><br>
+        <label for="fillColor">Fill Color:</label>
+        <input type="color" id="fillColor" value="#000000"><br><br>
+        <label for="pointColor">Point Color:</label>
+        <input type="color" id="pointColor" value="#000000"><br><br>
+        <button onclick="applyStyle()">Apply</button>
+        <button onclick="closeStylePanel()">Close</button>
+    </div>
+    <script src="resources/v10.6.0/dist/ol.js"></script>
+    <script src="resources/ol-layerswitcher-main/dist/ol-layerswitcher.js"></script>
+    <script src="resources/jquery-3.6.0.min.js"></script>
+    <script>
+        let filterVectorLayers = [];
+        let layerColors = {};
+
+        function updateApplyButtonState() {
+            const layers = document.getElementById('layerSelect').selectedOptions.length;
+            const start = document.getElementById('startDateTop').value;
+            const end = document.getElementById('endDateTop').value;
+            const applyBtn = document.querySelector('.apply-btn');
+            applyBtn.disabled = !(layers > 0 && start && end && new Date(start) <= new Date(end));
+        }
+
+        function updateColorPickers() {
+            const layerSelect = document.getElementById('layerSelect');
+            const selectedLayers = Array.from(layerSelect.selectedOptions).map(opt => opt.value);
+            const colorPickerDiv = document.getElementById('layerColorPickers');
+            colorPickerDiv.innerHTML = '';
+            selectedLayers.forEach(layer => {
+                const div = document.createElement('div');
+                div.className = 'color-picker-row';
+                div.innerHTML = `
+                    <label for="color-${layer}">${layer}</label>
+                    <input type="color" id="color-${layer}" value="${layerColors[layer] || '#000000'}">
+                `;
+                colorPickerDiv.appendChild(div);
+                document.getElementById(`color-${layer}`).addEventListener('change', (e) => {
+                    layerColors[layer] = e.target.value;
+                    updateApplyButtonState();
+                });
+            });
+        }
+
+        function populateStateDropdown() {
+            fetch('http://localhost:8000/api/states')
+                .then(res => {
+                    if (!res.ok) throw new Error(`Failed to load states: ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    const stateSelect = document.getElementById('stateSelect');
+                    stateSelect.innerHTML = '<option value="">All States</option>';
+                    data.states.forEach(state => {
+                        const option = document.createElement('option');
+                        option.value = state;
+                        option.textContent = state;
+                        stateSelect.appendChild(option);
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to load states:', err);
+                    alert('Could not load states. Please try again.');
+                });
+        }
+
+        function populateDistrictDropdown() {
+            const state = document.getElementById('stateSelect').value;
+            const layers = Array.from(document.getElementById('layerSelect').selectedOptions).map(opt => opt.value);
+            if (!layers.length) return;
+            fetch(`http://localhost:8000/api/districts?layers=${encodeURIComponent(layers.join(','))}&state=${encodeURIComponent(state)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Failed to load districts: ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    const districtSelect = document.getElementById('districtSelect');
+                    districtSelect.innerHTML = '<option value="">All Districts</option>';
+                    data.districts.forEach(district => {
+                        const option = document.createElement('option');
+                        option.value = district;
+                        option.textContent = district;
+                        districtSelect.appendChild(option);
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to load districts:', err);
+                    alert('Could not load districts. Please try again.');
+                });
+        }
+
+        document.getElementById('advancedFilters').addEventListener('change', function () {
+            const advancedDiv = document.getElementById('advancedFiltersDiv');
+            advancedDiv.style.display = this.checked ? 'block' : 'none';
+            if (this.checked) {
+                populateStateDropdown();
+                populateDistrictDropdown();
+            }
+        });
+
+        document.getElementById('stateSelect').addEventListener('change', populateDistrictDropdown);
+        document.getElementById('layerSelect').addEventListener('change', function () {
+            updateApplyButtonState();
+            updateColorPickers();
+            if (document.getElementById('advancedFilters').checked) {
+                populateDistrictDropdown();
+            }
+        });
+        document.getElementById('startDateTop').addEventListener('change', updateApplyButtonState);
+        document.getElementById('endDateTop').addEventListener('change', updateApplyButtonState);
+
+        function applyTopDateFilter() {
+            const layers = Array.from(document.getElementById('layerSelect').selectedOptions).map(opt => opt.value);
+            const start = document.getElementById('startDateTop').value;
+            const end = document.getElementById('endDateTop').value;
+            const advancedFilters = document.getElementById('advancedFilters').checked;
+            const state = document.getElementById('stateSelect').value;
+            const district = document.getElementById('districtSelect').value;
+            const spinner = document.getElementById('loadingSpinner');
+
+            if (!layers.length) {
+                alert("Please select at least one layer.");
+                return;
+            }
+            if (!start || !end) {
+                alert("Please select both start and end dates.");
+                return;
+            }
+            if (new Date(start) > new Date(end)) {
+                alert("Start date must be before end date.");
+                return;
+            }
+
+            const promises = layers.map(layer => {
+                let url = `http://localhost:8000/api/filter/${encodeURIComponent(layer)}?start_date=${start}&end_date=${end}`;
+                if (advancedFilters && state) url += `&state=${encodeURIComponent(state)}`;
+                if (advancedFilters && district) url += `&district=${encodeURIComponent(district)}`;
+                return fetch(url).then(res => {
+                    if (!res.ok) throw new Error(`Failed to fetch data for ${layer}: ${res.status}`);
+                    return res.json().then(data => ({ layer, data }));
+                });
+            });
+
+            spinner.style.display = 'block';
+            document.getElementById('map').style.cursor = 'wait';
+
+            Promise.all(promises)
+                .then(results => {
+                    const combinedFeatures = results.reduce((acc, { layer, data }) => {
+                        return data && data.features ? acc.concat(data.features.map(feature => ({
+                            ...feature,
+                            properties: { ...feature.properties, sourceLayer: layer }
+                        }))) : acc;
+                    }, []);
+
+                    if (!combinedFeatures.length) {
+                        alert("No data found for the selected layers and filters.");
+                        spinner.style.display = 'none';
+                        document.getElementById('map').style.cursor = 'default';
+                        return;
+                    }
+
+                    const layerTitle = `Filtered: ${layers.join(', ')} (${start} to ${end})${advancedFilters && state ? ` - ${state}` : ''}${advancedFilters && district ? ` - ${district}` : ''}`;
+                    const existingLayer = filterVectorLayers.find(layer => layer.get('title') === layerTitle);
+
+                    if (existingLayer) {
+                        alert("This filter combination already exists. Please modify the filters to create a new layer.");
+                        spinner.style.display = 'none';
+                        document.getElementById('map').style.cursor = 'default';
+                        return;
+                    }
+
+                    const newLayer = new ol.layer.Vector({
+                        source: new ol.source.Vector({
+                            features: new ol.format.GeoJSON().readFeatures(
+                                { type: 'FeatureCollection', features: combinedFeatures },
+                                { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
+                            )
+                        }),
+                        style: function(feature) {
+                            const sourceLayer = feature.get('sourceLayer');
+                            const color = layerColors[sourceLayer] || '#000000';
+                            return new ol.style.Style({
+                                stroke: new ol.style.Stroke({
+                                    color: color,
+                                    width: 2
+                                }),
+                                fill: new ol.style.Fill({
+                                    color: hexToRgba(color, 0.3)
+                                }),
+                                image: new ol.style.Circle({
+                                    radius: 6,
+                                    fill: new ol.style.Fill({ color: color }),
+                                    stroke: new ol.style.Stroke({ color: '#000', width: 1 })
+                                })
+                            });
+                        },
+                        title: layerTitle,
+                        visible: true
+                    });
+
+                    filterVectorLayers.push(newLayer);
+                    window.myDataGroup.getLayers().push(newLayer);
+
+                    const extent = newLayer.getSource().getExtent();
+                    if (!ol.extent.isEmpty(extent)) {
+                        window.map.getView().fit(extent, {
+                            padding: [20, 20, 20, 20],
+                            maxZoom: 15,
+                            duration: 1000
+                        });
+                    } else {
+                        alert("No valid geometry found in the filtered data.");
+                    }
+
+                    spinner.style.display = 'none';
+                    document.getElementById('map').style.cursor = 'default';
+                    updateLayerManagementOptions();
+                    updateStyleOptions();
+                    document.getElementById('downloadKML').disabled = false;
+                })
+                .catch(err => {
+                    console.error("Failed to fetch filtered data:", err);
+                    alert(`Failed to load data: ${err.message}`);
+                    spinner.style.display = 'none';
+                    document.getElementById('map').style.cursor = 'default';
+                });
+        }
+
+        function resetTopDateFilter() {
+            filterVectorLayers.forEach(layer => window.map.removeLayer(layer));
+            filterVectorLayers = [];
+            window.myDataGroup.getLayers().clear();
+            document.getElementById("startDateTop").value = '';
+            document.getElementById("endDateTop").value = '';
+            document.getElementById("layerSelect").selectedIndex = -1;
+            document.getElementById("advancedFilters").checked = false;
+            document.getElementById("advancedFiltersDiv").style.display = 'none';
+            document.getElementById("stateSelect").innerHTML = '<option value="">All States</option>';
+            document.getElementById("districtSelect").innerHTML = '<option value="">All Districts</option>';
+            document.getElementById("summary").innerHTML = 'No GPX files loaded.';
+            document.getElementById("downloadKML").disabled = true;
+            window.globalTrackData = {};
+            layerColors = {};
+            updateColorPickers();
+            window.map.getView().setCenter(ol.proj.fromLonLat([78.776032, 23.766398]));
+            window.map.getView().setZoom(4.5);
+            updateApplyButtonState();
+            updateLayerManagementOptions();
+            updateStyleOptions();
+            window.debouncedRenderPanel();
+        }
+
+        const filterBtn = document.getElementById('toggleFilterBtn');
+        const filterPanel = document.getElementById('dateFilterPanel');
+        filterBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            filterPanel.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (event) => {
+            const isClickInsidePanel = filterPanel.contains(event.target);
+            const isClickOnButton = filterBtn.contains(event.target);
+            if (!isClickInsidePanel && !isClickOnButton) {
+                filterPanel.classList.remove('show');
+                setTimeout(() => {
+                    filterPanel.style.display = 'none';
+                }, 300);
+            }
+        });
+
+        const observer = new MutationObserver(() => {
+            if (filterPanel.classList.contains('show')) {
+                filterPanel.style.display = 'block';
+            }
+        });
+        observer.observe(filterPanel, { attributes: true, attributeFilter: ['class'] });
+
+        function updateLayerManagementOptions() {
+            const select = document.getElementById('selectedLayer');
+            select.innerHTML = '<option value="">Select Layer</option>';
+            filterVectorLayers.forEach(layer => {
+                const option = document.createElement('option');
+                option.value = layer.get('title');
+                option.textContent = layer.get('title');
+                select.appendChild(option);
+            });
+        }
+
+        function showLayerManagement() {
+            document.getElementById('layerManagementPanel').classList.add('show');
+        }
+
+        function closeLayerManagement() {
+            document.getElementById('layerManagementPanel').classList.remove('show');
+        }
+
+        function renameLayer() {
+            const select = document.getElementById('selectedLayer');
+            const newName = prompt('Enter new layer name:', select.value);
+            if (newName && newName !== select.value) {
+                const layer = filterVectorLayers.find(l => l.get('title') === select.value);
+                if (layer) {
+                    layer.set('title', newName);
+                    updateLayerManagementOptions();
+                    updateStyleOptions();
+                    window.debouncedRenderPanel();
+                }
+            }
+        }
+
+        function deleteLayer() {
+            const select = document.getElementById('selectedLayer');
+            if (confirm(`Are you sure you want to delete the layer "${select.value}"?`)) {
+                const index = filterVectorLayers.findIndex(l => l.get('title') === select.value);
+                if (index !== -1) {
+                    window.map.removeLayer(filterVectorLayers[index]);
+                    filterVectorLayers.splice(index, 1);
+                    window.myDataGroup.getLayers().removeAt(index);
+                    if (window.globalTrackData && window.globalTrackData[select.value]) {
+                        delete window.globalTrackData[select.value];
+                        window.updateGPXSummaries();
+                    }
+                    updateLayerManagementOptions();
+                    updateStyleOptions();
+                    document.getElementById('downloadKML').disabled = Object.keys(window.globalTrackData).length === 0 && filterVectorLayers.length === 0;
+                    window.debouncedRenderPanel();
+                }
+            }
+        }
+
+        function updateStyleOptions() {
+            const select = document.getElementById('selectedStyleLayer');
+            select.innerHTML = '<option value="">Select Layer</option>';
+            filterVectorLayers.forEach(layer => {
+                const option = document.createElement('option');
+                option.value = layer.get('title');
+                option.textContent = layer.get('title');
+                select.appendChild(option);
+            });
+        }
+
+        function showStylePanel() {
+            document.getElementById('stylePanel').classList.add('show');
+        }
+
+        function closeStylePanel() {
+            document.getElementById('stylePanel').classList.remove('show');
+        }
+
+        function applyStyle() {
+            const select = document.getElementById('selectedStyleLayer');
+            const layer = filterVectorLayers.find(l => l.get('title') === select.value);
+            if (layer) {
+                const strokeColor = document.getElementById('strokeColor').value;
+                const fillColor = document.getElementById('fillColor').value;
+                const pointColor = document.getElementById('pointColor').value;
+
+                layer.setStyle(function(feature) {
+                    const sourceLayer = feature.get('sourceLayer') || select.value;
+                    const color = layerColors[sourceLayer] || pointColor;
+                    return new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: strokeColor,
+                            width: 2
+                        }),
+                        fill: new ol.style.Fill({
+                            color: hexToRgba(fillColor, 0.3)
+                        }),
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({ color: color }),
+                            stroke: new ol.style.Stroke({ color: '#000', width: 1 })
+                        })
+                    });
+                });
+            }
+        }
+
+        function hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function downloadKML() {
+    console.log('Entering downloadKML');
+    console.log('globalTrackData:', globalTrackData);
+    console.log('window.filterVectorLayers:', window.filterVectorLayers);
+    const availableLayers = [];
+    if (globalTrackData && typeof globalTrackData === 'object') {
+        Object.keys(globalTrackData).forEach(title => availableLayers.push({ type: 'gpx', title }));
+    } else {
+        console.warn('globalTrackData is invalid:', globalTrackData);
+    }
+    if (Array.isArray(window.filterVectorLayers)) {
+        window.filterVectorLayers.forEach(layer => availableLayers.push({ type: 'filtered', title: layer.get('title') }));
+    } else {
+        console.warn('window.filterVectorLayers is not an array:', window.filterVectorLayers);
+    }
+
+    if (availableLayers.length === 0) {
+        alert('No data available to download.');
+        return;
+    }
+
+    let layerTitle = availableLayers[0].title;
+    if (availableLayers.length > 1) {
+        layerTitle = prompt('Enter the layer name to export as KML:', availableLayers[0].title);
+        if (!layerTitle || !availableLayers.some(l => l.title === layerTitle)) {
+            alert('Invalid or no layer selected.');
+            return;
+        }
+    }
+
+    let filename = prompt(`Enter filename for KML (without extension) for ${layerTitle}:`, layerTitle);
+    if (!filename) return;
+    filename = filename.trim() + ".kml";
+
+    const layerType = availableLayers.find(l => l.title === layerTitle).type;
+
+    if (layerType === 'gpx') {
+        const { trackPoints, summaryText } = globalTrackData[layerTitle] || {};
+        if (!trackPoints) {
+            alert('No track data available for the selected GPX layer.');
+            return;
+        }
+        const coordinatesString = trackPoints.map(pt => `${pt.lon},${pt.lat},${pt.elevation}`).join(" ");
+        const kmlParts = [
+            `<?xml version="1.0" encoding="UTF-8"?>`,
+            `<kml xmlns="http://www.opengis.net/kml/2.2"><Document>`,
+            `<Folder><name>Track Summary</name>`,
+            `<Placemark><description><![CDATA[${summaryText.replace(/\n/g, "<br>")}]]></description>`,
+            `<LineString><coordinates>${coordinatesString}</coordinates></LineString>`,
+            `</Placemark></Folder>`,
+            `<Folder><name>Track Points</name>`
+        ];
+
+        for (const pt of trackPoints) {
+            kmlParts.push(`
+                <Placemark>
+                    <description><![CDATA[
+"lat": ${pt.lat},<br>
+"lon": ${pt.lon},<br>
+"elevation": ${pt.elevation},<br>
+"time": "${pt.time || 'N/A'}",<br>
+"istTime": "${pt.istTime || 'N/A'}",<br>
+"speed": ${pt.speed}
+                    ]]></description>
+                    <Point><coordinates>${pt.lon},${pt.lat},${pt.elevation}</coordinates></Point>
+                </Placemark>`);
+        }
+
+        kmlParts.push(`</Folder></Document></kml>`);
+        const blob = new Blob([kmlParts.join("")], { type: "application/vnd.google-earth.kml+xml" });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } else if (layerType === 'filtered') {
+        const layer = window.filterVectorLayers.find(l => l.get('title') === layerTitle);
+        if (!layer) {
+            alert('Selected layer not found.');
+            return;
+        }
+
+        const features = layer.getSource().getFeatures();
+        const kmlParts = [
+            `<?xml version="1.0" encoding="UTF-8"?>`,
+            `<kml xmlns="http://www.opengis.net/kml/2.2"><Document>`,
+            `<Folder><name>${layerTitle}</name>`
+        ];
+
+        features.forEach(feature => {
+            const geometry = feature.getGeometry();
+            const properties = feature.getProperties();
+            delete properties.geometry;
+            const description = Object.entries(properties)
+                .map(([key, value]) => `${key}: ${value || 'N/A'}`)
+                .join('<br>');
+            let coordinates;
+
+            if (geometry.getType() === 'Point') {
+                const coords = geometry.getCoordinates();
+                const lonLat = ol.proj.toLonLat(coords);
+                coordinates = `${lonLat[0]},${lonLat[1]},0`;
+                kmlParts.push(`
+                    <Placemark>
+                        <description><![CDATA[${description}]]></description>
+                        <Point><coordinates>${coordinates}</coordinates></Point>
+                    </Placemark>`);
+            } else if (geometry.getType() === 'LineString') {
+                const coords = geometry.getCoordinates();
+                coordinates = coords.map(c => {
+                    const lonLat = ol.proj.toLonLat(c);
+                    return `${lonLat[0]},${lonLat[1]},0`;
+                }).join(" ");
+                kmlParts.push(`
+                    <Placemark>
+                        <description><![CDATA[${description}]]></description>
+                        <LineString><coordinates>${coordinates}</coordinates></LineString>
+                    </Placemark>`);
+            } else if (geometry.getType() === 'Polygon') {
+                const coords = geometry.getCoordinates()[0];
+                coordinates = coords.map(c => {
+                    const lonLat = ol.proj.toLonLat(c);
+                    return `${lonLat[0]},${lonLat[1]},0`;
+                }).join(" ");
+                kmlParts.push(`
+                    <Placemark>
+                        <description><![CDATA[${description}]]></description>
+                        <Polygon><outerBoundaryIs><LinearRing><coordinates>${coordinates}</coordinates></LinearRing></outerBoundaryIs></Polygon>
+                    </Placemark>`);
+            }
+        });
+
+        kmlParts.push(`</Folder></Document></kml>`);
+        const blob = new Blob([kmlParts.join("")], { type: "application/vnd.google-earth.kml+xml" });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
+        
+
+        document.getElementById('downloadKML').addEventListener('click', downloadKML);
+    </script>
+    <script src="main.js"></script>
+</body>
+</html>

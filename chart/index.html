@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State-wise Police Station Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <canvas id="policeChart" width="400" height="400"></canvas>
+    <script>
+        // Example API URL (replace with your actual API endpoint)
+        const apiUrl = 'https://api.example.com/policestations';
+
+        // Function to fetch data from the API
+        async function fetchPoliceStationData() {
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok ' + response.statusText);
+                }
+                const data = await response.json();
+                processDataForChart(data);
+            } catch (error) {
+                console.error('There has been a problem with your fetch operation:', error);
+            }
+        }
+
+        // Function to process data and create the chart
+        function processDataForChart(data) {
+            // Count the number of police stations in each state
+            const stateCounts = {};
+            data.forEach(station => {
+                const state = station.state; // assuming 'state' is a field in the API response
+                if (stateCounts[state]) {
+                    stateCounts[state]++;
+                } else {
+                    stateCounts[state] = 1;
+                }
+            });
+
+            // Prepare data for Chart.js
+            const states = Object.keys(stateCounts);
+            const counts = Object.values(stateCounts);
+
+            // Create the chart using Chart.js
+            const ctx = document.getElementById('policeChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar', // or any other type you prefer
+                data: {
+                    labels: states,
+                    datasets: [{
+                        label: 'Number of Police Stations',
+                        data: counts,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Fetch and process the data when the page loads
+        window.onload = fetchPoliceStationData;
+    </script>
+</body>
+</html>

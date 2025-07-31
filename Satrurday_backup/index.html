@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Simplified - Web Mapping Application</title>
+    <link rel="stylesheet" href="resources/v10.6.0/ol.css">
+    <link rel="stylesheet" href="resources/ol-layerswitcher-main/dist/ol-layerswitcher.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        #layerSelect {
+            width: 200px;
+            height: 100px; /* Allow multiple selections to be visible */
+        }
+
+        #advancedFiltersDiv {
+            display: none; /* Hidden by default */
+            width: 100%;
+        }
+
+        .spinner {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .attQueryDiv {
+            position: absolute;
+            top: 80px;
+            right: 10px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 998;
+            width: 250px;
+        }
+
+        .attListDiv {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            max-height: 200px;
+            overflow: auto;
+            background: rgba(255, 255, 255, 0.95);
+            z-index: 997;
+        }
+
+        .ol-popup {
+            position: absolute;
+            background-color: white;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            bottom: 12px;
+            left: -50px;
+            min-width: 200px;
+        }
+
+        .ol-popup:after, .ol-popup:before {
+            top: 100%;
+            border: solid transparent;
+            content: " ";
+            height: 0;
+            width: 0;
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .ol-popup-closer {
+            text-decoration: none;
+            position: absolute;
+            top: 2px;
+            right: 8px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+    <div id="dateFilterPanel">
+        <h3 style="margin: 0 0 10px;">Filter Data</h3>
+        <div class="form-row">
+            <label for="layerSelect">Layers</label>
+            <select id="layerSelect" multiple>
+                <option value="lweinput">LWE Input</option>
+                <option value="jkinput">JK Input</option>
+                <option value="neinput">NE Input</option>
+                <option value="crpfdeployment">CRPF Deployment</option>
+                <option value="uavintercept">UAV Intercept</option>
+                <option value="crpfincident">CRPF Incident</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="startDateTop">Start Date</label>
+            <input type="date" id="startDateTop" />
+        </div>
+        <div class="form-row">
+            <label for="endDateTop">End Date</label>
+            <input type="date" id="endDateTop" />
+        </div>
+        <div class="form-row checkbox-row">
+            <input type="checkbox" id="advancedFilters" />
+            <label for="advancedFilters">Enable Advanced Filters</label>
+        </div>
+        <div id="advancedFiltersDiv">
+            <div class="form-row">
+                <label for="stateSelect">State</label>
+                <select id="stateSelect">
+                    <option value="">All States</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="districtSelect">District</label>
+                <select id="districtSelect">
+                    <option value="">All Districts</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row btn-row">
+            <button onclick="applyTopDateFilter()" class="apply-btn" disabled>Apply</button>
+            <button onclick="resetTopDateFilter()" class="reset-btn">Reset</button>
+            <div id="loadingSpinner" class="spinner"></div>
+        </div>
+    </div>
+    <!-- Filter Toggle Button -->
+    <button id="toggleFilterBtn" style="
+        position: absolute;
+        left: 10px;
+        bottom: 100px;
+        z-index: 999;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    ">🔍 Filter</button>
+    <!-- Map -->
+    <div id="map"></div>
+    <!-- Popup -->
+    <div id="popup" class="ol-popup">
+        <a href="#" id="popup-closer" class="ol-popup-closer">✖</a>
+        <div id="popup-content"></div>
+    </div>
+    <!-- Attribute Query Panel -->
+    <div class="attQueryDiv" id="attQueryDiv">
+        <div class="headerDiv" id="headerDiv">
+            <label>Attribute Query</label>
+        </div><br>
+        <label for="selectLayer">Select Layer</label>
+        <select name="selectLayer" id="selectLayer"></select><br><br>
+        <label for="selectAttribute">Select Attribute</label>
+        <select name="selectAttribute" id="selectAttribute"></select><br><br>
+        <label for="selectOperator">Select Operator</label>
+        <select name="selectOperator" id="selectOperator"></select><br><br>
+        <label for="enterValue">Enter Value</label>
+        <input type="text" name="enterValue" id="enterValue"><br><br>
+        <button type="button" id="attQryRun" class="attQryRun" onclick="newaddGeoJsonToMap()">Run</button>
+    </div>
+    <!-- Attribute Query Result List -->
+    <div class="attListDiv" id="attListDiv"></div>
+    <!-- File Input for KML/KMZ/GPX -->
+    <input type="file" id="kmlFileInput" accept=".kml,.kmz,.gpx" style="display: none;">
+    <!-- JS & Libraries -->
+    <script src="resources/v10.6.0/dist/ol.js"></script>
+    <script src="resources/ol-layerswitcher-main/dist/ol-layerswitcher.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="main.js"></script>
+    <!-- Filter Functions -->
+    <script>
+        let filterVectorLayer = null;
+
+        // Update apply button state based on input validity
+        function updateApplyButtonState() {
+            const layers = document.getElementById('layerSelect').selectedOptions.length;
+            const start = document.getElementById('startDateTop').value;
+            const end = document.getElementById('endDateTop').value;
+            const applyBtn = document.querySelector('.apply-btn');
+            applyBtn.disabled = !(layers > 0 && start && end && new Date(start) <= new Date(end));
+        }
+
+        // Populate state dropdown
+        function populateStateDropdown() {
+            fetch('http://localhost:8000/api/states')
+                .then(res => {
+                    if (!res.ok) throw new Error(`Failed to load states: ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    const stateSelect = document.getElementById('stateSelect');
+                    stateSelect.innerHTML = '<option value="">All States</option>';
+                    data.states.forEach(state => {
+                        const option = document.createElement('option');
+                        option.value = state;
+                        option.textContent = state;
+                        stateSelect.appendChild(option);
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to load states:', err);
+                    alert('Could not load states. Please try again.');
+                });
+        }
+
+        // Populate district dropdown based on selected state
+        function populateDistrictDropdown() {
+            const state = document.getElementById('stateSelect').value;
+            const layers = Array.from(document.getElementById('layerSelect').selectedOptions).map(opt => opt.value);
+            if (!layers.length) return;
+            fetch(`http://localhost:8000/api/districts?layers=${encodeURIComponent(layers.join(','))}&state=${encodeURIComponent(state)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Failed to load districts: ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    const districtSelect = document.getElementById('districtSelect');
+                    districtSelect.innerHTML = '<option value="">All Districts</option>';
+                    data.districts.forEach(district => {
+                        const option = document.createElement('option');
+                        option.value = district;
+                        option.textContent = district;
+                        districtSelect.appendChild(option);
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to load districts:', err);
+                    alert('Could not load districts. Please try again.');
+                });
+        }
+
+        // Toggle advanced filters visibility
+        document.getElementById('advancedFilters').addEventListener('change', function () {
+            const advancedDiv = document.getElementById('advancedFiltersDiv');
+            advancedDiv.style.display = this.checked ? 'block' : 'none';
+            if (this.checked) {
+                populateStateDropdown();
+                populateDistrictDropdown();
+            }
+        });
+
+        // Update districts when state or layer changes
+        document.getElementById('stateSelect').addEventListener('change', populateDistrictDropdown);
+        document.getElementById('layerSelect').addEventListener('change', function () {
+            updateApplyButtonState();
+            if (document.getElementById('advancedFilters').checked) {
+                populateDistrictDropdown();
+            }
+        });
+        document.getElementById('startDateTop').addEventListener('change', updateApplyButtonState);
+        document.getElementById('endDateTop').addEventListener('change', updateApplyButtonState);
+
+        function applyTopDateFilter() {
+            const layers = Array.from(document.getElementById('layerSelect').selectedOptions).map(opt => opt.value);
+            const start = document.getElementById('startDateTop').value;
+            const end = document.getElementById('endDateTop').value;
+            const advancedFilters = document.getElementById('advancedFilters').checked;
+            const state = document.getElementById('stateSelect').value;
+            const district = document.getElementById('districtSelect').value;
+            const spinner = document.getElementById('loadingSpinner');
+
+            // Validate inputs
+            if (!layers.length) {
+                alert("Please select at least one layer.");
+                return;
+            }
+            if (!start || !end) {
+                alert("Please select both start and end dates.");
+                return;
+            }
+            if (new Date(start) > new Date(end)) {
+                alert("Start date must be before end date.");
+                return;
+            }
+
+            // Construct URL for each layer and combine results
+            const promises = layers.map(layer => {
+                let url = `http://localhost:8000/api/filter/${encodeURIComponent(layer)}?start_date=${start}&end_date=${end}`;
+                if (advancedFilters && state) url += `&state=${encodeURIComponent(state)}`;
+                if (advancedFilters && district) url += `&district=${encodeURIComponent(district)}`;
+                return fetch(url).then(res => {
+                    if (!res.ok) throw new Error(`Failed to fetch data for ${layer}: ${res.status}`);
+                    return res.json();
+                });
+            });
+
+            spinner.style.display = 'block';
+            document.getElementById('map').style.cursor = 'wait';
+
+            Promise.all(promises)
+                .then(results => {
+                    const combinedFeatures = results.reduce((acc, data) => {
+                        return data && data.features ? acc.concat(data.features) : acc;
+                    }, []);
+
+                    if (filterVectorLayer) {
+                        map.removeLayer(filterVectorLayer);
+                        filterVectorLayer = null;
+                    }
+
+                    if (!combinedFeatures.length) {
+                        alert("No data found for the selected layers and filters.");
+                        spinner.style.display = 'none';
+                        document.getElementById('map').style.cursor = 'default';
+                        return;
+                    }
+
+                    filterVectorLayer = new ol.layer.Vector({
+                        source: new ol.source.Vector({
+                            features: new ol.format.GeoJSON().readFeatures(
+                                { type: 'FeatureCollection', features: combinedFeatures },
+                                { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
+                            )
+                        }),
+                        style: new ol.style.Style({
+                            stroke: new ol.style.Stroke({
+                                color: '#007bff',
+                                width: 2
+                            }),
+                            fill: new ol.style.Fill({
+                                color: 'rgba(0, 123, 255, 0.3)'
+                            }),
+                            image: new ol.style.Circle({
+                                radius: 6,
+                                fill: new ol.style.Fill({ color: '#007bff' }),
+                                stroke: new ol.style.Stroke({ color: '#000', width: 1 })
+                            })
+                        }),
+                        title: `Filtered: ${layers.join(', ')}`
+                    });
+
+                    map.addLayer(filterVectorLayer);
+
+                    const extent = filterVectorLayer.getSource().getExtent();
+                    if (ol.extent.isEmpty(extent)) {
+                        alert("No valid geometry found in the filtered data.");
+                        spinner.style.display = 'none';
+                        document.getElementById('map').style.cursor = 'default';
+                        return;
+                    }
+                    map.getView().fit(extent, {
+                        padding: [20, 20, 20, 20],
+                        maxZoom: 15,
+                        duration: 1000
+                    });
+
+                    spinner.style.display = 'none';
+                    document.getElementById('map').style.cursor = 'default';
+                })
+                .catch(err => {
+                    console.error("Failed to fetch filtered data:", err);
+                    alert(`Failed to load data. Please try again or contact support. Error: ${err.message}`);
+                    spinner.style.display = 'none';
+                    document.getElementById('map').style.cursor = 'default';
+                });
+        }
+
+        function resetTopDateFilter() {
+            if (filterVectorLayer) {
+                map.removeLayer(filterVectorLayer);
+                filterVectorLayer = null;
+            }
+            document.getElementById("startDateTop").value = '';
+            document.getElementById("endDateTop").value = '';
+            document.getElementById("layerSelect").selectedIndex = -1;
+            document.getElementById("advancedFilters").checked = false;
+            document.getElementById("advancedFiltersDiv").style.display = 'none';
+            document.getElementById("stateSelect").innerHTML = '<option value="">All States</option>';
+            document.getElementById("districtSelect").innerHTML = '<option value="">All Districts</option>';
+            map.getView().setCenter(ol.proj.fromLonLat([78.776032, 23.766398]));
+            map.getView().setZoom(4.5);
+            updateApplyButtonState();
+        }
+
+        // Toggle filter panel visibility
+        const filterBtn = document.getElementById('toggleFilterBtn');
+        const filterPanel = document.getElementById('dateFilterPanel');
+        filterBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            filterPanel.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (event) => {
+            const isClickInsidePanel = filterPanel.contains(event.target);
+            const isClickOnButton = filterBtn.contains(event.target);
+            if (!isClickInsidePanel && !isClickOnButton) {
+                filterPanel.classList.remove('show');
+                setTimeout(() => {
+                    filterPanel.style.display = 'none';
+                }, 300);
+            }
+        });
+
+        const observer = new MutationObserver(() => {
+            if (filterPanel.classList.contains('show')) {
+                filterPanel.style.display = 'block';
+            }
+        });
+        observer.observe(filterPanel, { attributes: true, attributeFilter: ['class'] });
+    </script>
+</body>
+</html>

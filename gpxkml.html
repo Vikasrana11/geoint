@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+
+<head th:replace="~{newfragment :: head}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPX To KML Converter with Multi-File Support</title>
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    .topnavbar {
+      background-color: #333;
+      color: white;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .topnavbar h1 {
+      flex-grow: 1;
+      margin: 0;
+      font-size: 1.5rem;
+    }
+    .map-container {
+      position: relative;
+      width: 100%;
+      height: 500px;
+      margin-top: 1rem;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    .ol-popup {
+      background: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      min-width: 150px;
+      position: relative;
+      bottom: 12px;
+      left: -50%;
+      transform: translateX(50%);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .close-button {
+      position: absolute;
+      top: 2px;
+      right: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #888;
+    }
+    .close-button:hover {
+      color: #000;
+    }
+    #summary {
+      font-size: 0.95rem;
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+    .download-buttons {
+      margin-bottom: 10px;
+    }
+    #legend {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      max-width: 200px;
+      z-index: 1000;
+      display: none;
+    }
+    #legend h4 {
+      margin: 0 0 10px 0;
+      font-size: 0.9rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .legend-item svg, .legend-item img {
+      margin-right: 8px;
+    }
+    .legend-item span {
+      font-size: 0.85rem;
+    }
+    @media (max-width: 768px) {
+      #legend {
+        position: static;
+        max-width: 100%;
+        margin: 10px auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+ 	<div th:replace="~{newfragment :: newsidebar}"></div>
+  <div class="topnavbar">
+    <button class="btn btn-dark me-3" id="toggleSidebar" aria-label="Toggle sidebar visibility">☰</button>
+    <h1>GPX To KML Converter</h1>
+  </div>
+
+  <main class="container mt-3">
+    <input class="form-control mb-3" type="file" id="gpxfile" accept=".gpx" multiple />
+    <div class="download-buttons">
+      <button class="btn btn-primary me-2" id="downloadKml" disabled>Download KML</button>
+      <button class="btn btn-secondary me-2" id="downloadBatchKml" disabled>Download Batch KML</button>
+      <button class="btn btn-danger" id="resetButton">Reset</button>
+    </div>
+    <div id="summary"><strong>GPX Summary:</strong> Load one or more .gpx files to see details.</div>
+    <div class="map-container">
+      <div id="map"></div>
+      <div id="legend">
+        <h4>Legend</h4>
+        <div class="legend-item">
+          <svg width="12" height="12"><circle cx="6" cy="6" r="6" fill="green" stroke="white" stroke-width="1"/></svg>
+          <span>Start Point</span>
+        </div>
+        <div class="legend-item">
+          <svg width="12" height="12"><circle cx="6" cy="6" r="6" fill="red" stroke="white" stroke-width="1"/></svg>
+          <span>End Point</span>
+        </div>
+        <div class="legend-item">
+          <svg width="18" height="18"><circle cx="8" cy="8" r="6" fill="yellow" stroke="white" stroke-width="2"/></svg>
+          <span>Stop Point (Speed = 0 km/h)</span>
+        </div>
+        <div class="legend-item">
+          <svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="blue" stroke="white" stroke-width="1"/></svg>
+          <span>Track Point</span>
+        </div>
+        <div class="legend-item">
+          <img src="https://cdn-icons-png.flaticon.com/512/252/252025.png" width="12" height="12" style="object-fit: contain;" />
+          <span>Waypoint</span>
+        </div>
+        <div class="legend-item">
+          <svg width="20" height="4"><line x1="0" y1="2" x2="20" y2="2" stroke="red" stroke-width="3"/></svg>
+          <span>Track</span>
+        </div>
+      </div>
+    </div>
+    <pre id="output" style="white-space: pre-wrap; margin-top: 1rem;"></pre>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
+<!-- External Libraries -->
+	<script th:src="@{/newlibrary/jquery/jquery-3.7.1.min.js}"></script>
+	<script
+		th:src="@{/newlibrary/bootstrap-5.3/js/bootstrap.bundle.min.js}"></script>
+	<script th:src="@{/newlibrary/Datatable/datatables.min.js}"></script>
+	<script th:src="@{/newlibrary/select2-4.1/select2.min.js}"></script>
+	<script th:src="@{/newlibrary/js/bhushakti3d.js}"></script>
+	<script th:src="@{/newlibrary/homepage/homepage.js}"></script>
+	<script th:src="@{/newlibrary/ol10/dist/ol.js}"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      let map;
+      let vectorSource = new ol.source.Vector();
+      let vectorLayer;
+      let allFeatures = [];
+
+      function initMap() {
+        vectorSource = new ol.source.Vector();
+        vectorLayer = new ol.layer.Vector({
+          source: vectorSource,
+          style: styleFunction,
+        });
+
+        map = new ol.Map({
+          target: "map",
+          layers: [
+            new ol.layer.Tile({ source: new ol.source.OSM() }),
+            vectorLayer,
+          ],
+          view: new ol.View({
+            center: ol.proj.fromLonLat([80.3, 19.8]),
+            zoom: 10,
+          }),
+        });
+
+        const popupContainer = document.createElement("div");
+        popupContainer.className = "ol-popup";
+        const popupContent = document.createElement("div");
+        const closeBtn = document.createElement("div");
+        closeBtn.className = "close-button";
+        closeBtn.innerHTML = "×";
+        popupContainer.appendChild(closeBtn);
+        popupContainer.appendChild(popupContent);
+
+        const overlay = new ol.Overlay({
+          element: popupContainer,
+          positioning: "bottom-center",
+          offset: [0, -10],
+          stopEvent: false,
+        });
+        closeBtn.onclick = () => overlay.setPosition(undefined);
+
+        map.addOverlay(overlay);
+
+        map.on("click", function (evt) {
+          let found = false;
+          map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+            const props = feature.getProperties();
+            if (!props) return;
+
+            if (feature.getGeometry().getType() === "Point") {
+              const coord = feature.getGeometry().getCoordinates();
+
+              let infoHtml = "";
+
+              if (props.type === "stop") {
+                infoHtml = `<strong>Stop Point</strong><br/>
+                Lat: ${props.lat}<br/>Lon: ${props.lon}<br/>Time: ${
+                  props.istTime || "N/A"
+                }`;
+              } else if (props.type === "waypoint") {
+                infoHtml = `<strong>Waypoint</strong><br/>Name: ${
+                  props.name || "N/A"
+                }<br/>Lat: ${props.lat}<br/>Lon: ${props.lon}`;
+              } else if (
+                props.type === "trackpoint" ||
+                props.type === "start" ||
+                props.type === "end"
+              ) {
+                infoHtml = `<strong>Track Point</strong><br/>
+                Lat: ${props.lat}<br/>Lon: ${props.lon}<br/>
+                Elevation: ${props.elevation} m<br/>
+                Time (IST): ${props.istTime}<br/>
+                Speed: ${props.speed.toFixed(2)} km/h`;
+              } else {
+                infoHtml = `<strong>Point</strong><br/>Lat: ${props.lat}<br/>Lon: ${props.lon}`;
+              }
+
+              popupContent.innerHTML = infoHtml;
+              overlay.setPosition(coord);
+              found = true;
+            }
+          });
+          if (!found) overlay.setPosition(undefined);
+        });
+      }
+
+      function resetMap() {
+        allFeatures = [];
+        vectorSource.clear();
+        document.getElementById("summary").innerHTML = "<strong>GPX Summary:</strong> Load one or more .gpx files to see details.";
+        document.getElementById("downloadKml").disabled = true;
+        document.getElementById("downloadBatchKml").disabled = true;
+        document.getElementById("gpxfile").value = "";
+        document.getElementById("legend").style.display = "none";
+        map.getView().setCenter(ol.proj.fromLonLat([80.3, 19.8]));
+        map.getView().setZoom(10);
+      }
+
+      function haversine(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const toRad = (x) => (x * Math.PI) / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) *
+            Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      }
+
+      function convertToIST(utcStr) {
+        if (!utcStr) return "N/A";
+        try {
+          const date = new Date(utcStr);
+          if (isNaN(date.getTime())) return "N/A";
+          return new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+            year: "numeric",
+            month: "short",
+            day: "2-digit",
+          })
+            .format(date)
+            .replace(",", "");
+        } catch {
+          return "N/A";
+        }
+      }
+
+      function styleFunction(feature) {
+        const geomType = feature.getGeometry().getType();
+        const props = feature.getProperties();
+
+        if (geomType === "Point") {
+          if (props.type === "start") {
+            return new ol.style.Style({
+              image: new ol.style.Circle({
+                radius: 6,
+                fill: new ol.style.Fill({ color: "green" }),
+                stroke: new ol.style.Stroke({ color: "white", width: 1 }),
+              }),
+            });
+          } else if (props.type === "end") {
+            return new ol.style.Style({
+              image: new ol.style.Circle({
+                radius: 8,
+                fill: new ol.style.Fill({ color: "red" }),
+                stroke: new ol.style.Stroke({ color: "white", width: 1 }),
+              }),
+            });
+          } else if (props.type === "stop") {
+            return new ol.style.Style({
+              image: new ol.style.Circle({
+                radius: 10,
+                fill: new ol.style.Fill({ color: "yellow" }),
+                stroke: new ol.style.Stroke({ color: "white", width: 1 }),
+              }),
+            });
+          } else if (props.type === "waypoint") {
+            return new ol.style.Style({
+              image: new ol.style.Icon({
+                src: "https://cdn-icons-png.flaticon.com/512/252/252025.png",
+                scale: 0.05,
+                anchor: [0.5, 1],
+              }),
+            });
+          } else {
+            return new ol.style.Style({
+              image: new ol.style.Circle({
+                radius: 4,
+                fill: new ol.style.Fill({ color: "blue" }),
+                stroke: new ol.style.Stroke({ color: "white", width: 1 }),
+              }),
+            });
+          }
+        } else if (geomType === "LineString") {
+          return new ol.style.Style({
+            stroke: new ol.style.Stroke({
+              color: "red",
+              width: 3,
+            }),
+          });
+        }
+        return null;
+      }
+
+      function generateKML({ features, name }) {
+        let kmlOutput = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${name || "GPX Data"}</name>
+    <Style id="trackStyle">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>3</width>
+      </LineStyle>
+    </Style>
+    <Style id="startPoint">
+      <IconStyle>
+        <color>ff00ff00</color>
+        <scale>1.2</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+    <Style id="endPoint">
+      <IconStyle>
+        <color>ff0000ff</color>
+        <scale>1.2</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+    <Style id="stopPoint">
+      <IconStyle>
+        <color>ff00ffff</color>
+        <scale>1.0</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/ylw-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+    <Style id="waypoint">
+      <IconStyle>
+        <scale>1.0</scale>
+        <Icon>
+          <href>https://cdn-icons-png.flaticon.com/512/252/252025.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+    <Style id="trackPoint">
+      <IconStyle>
+        <color>ffff0000</color>
+        <scale>0.8</scale>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>`;
+
+        features.forEach((feature) => {
+          const geom = feature.getGeometry();
+          const props = feature.getProperties();
+          const type = props.type;
+
+          if (geom.getType() === "Point") {
+            const [lon, lat] = ol.proj.toLonLat(geom.getCoordinates());
+            let styleId = type === "start" ? "startPoint" :
+                          type === "end" ? "endPoint" :
+                          type === "stop" ? "stopPoint" :
+                          type === "waypoint" ? "waypoint" : "trackPoint";
+
+            kmlOutput += `
+    <Placemark>
+      <styleUrl>#${styleId}</styleUrl>
+      <Point>
+        <coordinates>${lon},${lat}</coordinates>
+      </Point>
+      <ExtendedData>
+        <Data name="type"><value>${type}</value></Data>
+        ${props.name ? `<Data name="name"><value>${props.name}</value></Data>` : ""}
+        ${props.elevation ? `<Data name="elevation"><value>${props.elevation}</value></Data>` : ""}
+        ${props.time ? `<Data name="time"><value>${props.time}</value></Data>` : ""}
+        ${props.istTime ? `<Data name="istTime"><value>${props.istTime}</value></Data>` : ""}
+        ${props.speed !== undefined ? `<Data name="speed"><value>${props.speed.toFixed(2)}</value></Data>` : ""}
+      </ExtendedData>
+    </Placemark>`;
+          } else if (geom.getType() === "LineString") {
+            const coordinates = geom.getCoordinates().map(coord => {
+              const [lon, lat] = ol.proj.toLonLat(coord);
+              return `${lon},${lat}`;
+            }).join(" ");
+
+            kmlOutput += `
+    <Placemark>
+      <styleUrl>#trackStyle</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>${coordinates}</coordinates>
+      </LineString>
+      <ExtendedData>
+        <Data name="type"><value>track</value></Data>
+      </ExtendedData>
+    </Placemark>`;
+          }
+        });
+
+        kmlOutput += `
+  </Document>
+</kml>`;
+        return kmlOutput;
+      }
+
+      async function downloadKML(data, filename) {
+        try {
+          // Check if File System Access API is supported
+          if (window.showSaveFilePicker) {
+            // Suggest the file name based on input file or default for batch
+            const suggestedName = filename || "output.kml";
+            const fileHandle = await window.showSaveFilePicker({
+              suggestedName: suggestedName,
+              types: [
+                {
+                  description: "KML Files",
+                  accept: { "application/vnd.google-earth.kml+xml": [".kml"] },
+                },
+              ],
+            });
+
+            // Create a writable stream and write the KML data
+            const writable = await fileHandle.createWritable();
+            await writable.write(data);
+            await writable.close();
+          } else {
+            // Fallback for browsers that don't support showSaveFilePicker
+            const blob = new Blob([data], { type: "application/vnd.google-earth.kml+xml" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }
+        } catch (err) {
+          if (err.name === "AbortError") {
+            console.log("User cancelled the save dialog");
+          } else {
+            console.error("Error saving file:", err);
+            alert(`Failed to save file: ${err.message}`);
+          }
+        }
+      }
+
+      function parseGPX(xmlString, filename) {
+        try {
+          const parser = new DOMParser();
+          const gpx = parser.parseFromString(xmlString, "application/xml");
+
+          if (gpx.documentElement.nodeName === "parsererror") {
+            throw new Error("Invalid XML format");
+          }
+
+          const trkpts = Array.from(gpx.getElementsByTagName("trkpt"));
+          const wpts = Array.from(gpx.getElementsByTagName("wpt"));
+
+          const features = [];
+          const lineCoords = [];
+          const speeds = [];
+          let totalDistance = 0;
+          const elevations = [];
+
+          for (let i = 0; i < trkpts.length; i++) {
+            const pt = trkpts[i];
+            const lat = parseFloat(pt.getAttribute("lat"));
+            const lon = parseFloat(pt.getAttribute("lon"));
+            if (isNaN(lat) || isNaN(lon)) {
+              console.warn(`Invalid lat/lon for trackpoint ${i}`);
+              continue;
+            }
+
+            const ele = parseFloat(pt.getElementsByTagName("ele")[0]?.textContent || 0);
+            const timeStr = pt.getElementsByTagName("time")[0]?.textContent || null;
+
+            let speed = 0;
+            if (i > 0 && timeStr) {
+              const prev = trkpts[i - 1];
+              const prevLat = parseFloat(prev.getAttribute("lat"));
+              const prevLon = parseFloat(prev.getAttribute("lon"));
+              const prevTimeStr = prev.getElementsByTagName("time")[0]?.textContent;
+              if (!isNaN(prevLat) && !isNaN(prevLon) && prevTimeStr) {
+                const dist = haversine(prevLat, prevLon, lat, lon);
+                totalDistance += dist;
+                const timeDiff = (new Date(timeStr) - new Date(prevTimeStr)) / 1000;
+                if (timeDiff > 0) speed = (dist / timeDiff) * 3.6;
+              }
+            }
+
+            speeds.push(speed);
+            elevations.push(ele);
+            lineCoords.push([lon, lat]);
+
+            features.push(
+              new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+                lat,
+                lon,
+                elevation: ele,
+                time: timeStr,
+                istTime: convertToIST(timeStr),
+                speed,
+                type: "trackpoint",
+              })
+            );
+          }
+
+          if (features.length > 0) {
+            features[0].set("type", "start");
+            features[features.length - 1].set("type", "end");
+          }
+
+          for (let i = 0; i < speeds.length; i++) {
+            if (speeds[i] === 0) {
+              const pt = trkpts[i];
+              const lat = parseFloat(pt.getAttribute("lat"));
+              const lon = parseFloat(pt.getAttribute("lon"));
+              if (isNaN(lat) || isNaN(lon)) continue;
+              const timeStr = pt.getElementsByTagName("time")[0]?.textContent || null;
+              features.push(
+                new ol.Feature({
+                  geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+                  lat,
+                  lon,
+                  istTime: convertToIST(timeStr),
+                  speed: speeds[i],
+                  type: "stop",
+                })
+              );
+            }
+          }
+
+          if (lineCoords.length > 1) {
+            features.push(
+              new ol.Feature({
+                geometry: new ol.geom.LineString(lineCoords.map((c) => ol.proj.fromLonLat(c))),
+                type: "track",
+              })
+            );
+          }
+
+          for (const wpt of wpts) {
+            const lat = parseFloat(wpt.getAttribute("lat"));
+            const lon = parseFloat(wpt.getAttribute("lon"));
+            if (isNaN(lat) || isNaN(lon)) continue;
+            const name = wpt.getElementsByTagName("name")[0]?.textContent || null;
+
+            features.push(
+              new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+                lat,
+                lon,
+                name,
+                type: "waypoint",
+              })
+            );
+          }
+
+          return { features, totalDistance, elevations, startTime: trkpts[0]?.getElementsByTagName("time")[0]?.textContent, endTime: trkpts[trkpts.length - 1]?.getElementsByTagName("time")[0]?.textContent, speeds, name: filename };
+        } catch (err) {
+          throw new Error(`Failed to parse GPX: ${err.message}`);
+        }
+      }
+
+      function updateSummary() {
+        let trackCount = 0;
+        let waypointCount = 0;
+        let stopCount = 0;
+        let totalDistance = 0;
+        let minElevation = Infinity;
+        let maxElevation = -Infinity;
+        let startTime = null;
+        let endTime = null;
+        let speeds = [];
+        let trackFiles = 0;
+
+        for (const fileData of allFeatures) {
+          for (const f of fileData.features) {
+            const t = f.get("type");
+            if (t === "trackpoint" || t === "start" || t === "end") trackCount++;
+            else if (t === "waypoint") waypointCount++;
+            else if (t === "stop") stopCount++;
+            if (f.get("elevation") !== undefined) {
+              minElevation = Math.min(minElevation, f.get("elevation"));
+              maxElevation = Math.max(maxElevation, f.get("elevation"));
+            }
+            if (f.get("speed") !== undefined) {
+              speeds.push(f.get("speed"));
+            }
+          }
+          totalDistance += fileData.totalDistance;
+          if (fileData.startTime) startTime = fileData.startTime;
+          if (fileData.endTime) endTime = fileData.endTime;
+          if (fileData.features.some(f => f.get("type") === "track")) trackFiles++;
+        }
+
+        const minSpeed = speeds.length > 0 ? Math.min(...speeds) : 0;
+        const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : 0;
+        const avgSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+
+        const summaryHTML = `
+          <strong>GPX Summary:</strong><br/>
+          Tracks: ${trackFiles}<br/>
+          Waypoints: ${waypointCount}<br/>
+          Track Points: ${trackCount}<br/>
+          Stop Points: ${stopCount}<br/>
+          Start Time (IST): ${startTime ? convertToIST(startTime) : "N/A"}<br/>
+          End Time (IST): ${endTime ? convertToIST(endTime) : "N/A"}<br/>
+          Elevation (min → max): ${minElevation !== Infinity ? minElevation.toFixed(2) : "N/A"} m → ${maxElevation !== -Infinity ? maxElevation.toFixed(2) : "N/A"} m<br/>
+          Distance: ${(totalDistance / 1000).toFixed(2)} km<br/>
+          Speed (km/h):<br/>
+          Min: ${minSpeed.toFixed(2)}<br/>
+          Max: ${maxSpeed.toFixed(2)}<br/>
+          Average: ${avgSpeed.toFixed(2)}
+        `;
+        document.getElementById("summary").innerHTML = summaryHTML;
+
+        document.getElementById("downloadKml").disabled = allFeatures.length === 0;
+        document.getElementById("downloadBatchKml").disabled = allFeatures.length < 2;
+        document.getElementById("legend").style.display = allFeatures.length > 0 ? "block" : "none";
+      }
+
+      document.getElementById("gpxfile").addEventListener("change", function (event) {
+        const files = event.target.files;
+        if (!files.length) return;
+
+        if (!map) initMap();
+
+        for (const file of files) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            try {
+              const data = parseGPX(e.target.result, file.name);
+              allFeatures.push(data);
+              vectorSource.addFeatures(data.features);
+              updateSummary();
+              const extent = vectorSource.getExtent();
+              if (!ol.extent.isEmpty(extent)) {
+                map.getView().fit(extent, { padding: [50, 50, 50, 50], maxZoom: 15 });
+              }
+
+              document.getElementById("downloadKml").onclick = () => {
+                const kml = generateKML(data);
+                const kmlFileName = data.name.replace(/\.gpx$/i, ".kml");
+                downloadKML(kml, kmlFileName);
+              };
+
+              document.getElementById("downloadBatchKml").onclick = async () => {
+                const batchKml = allFeatures.map((data, index) => generateKML({ ...data, name: data.name || `GPX_${index + 1}` })).join("\n");
+                const batchKmlWrapper = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+${batchKml.replace(/<\?xml[^>]*>\n<kml[^>]*>\n\s*<Document>\n|\n\s*<\/Document>\n\s*<\/kml>/g, "")}
+  </Document>
+</kml>`;
+                await downloadKML(batchKmlWrapper, "batch_gpx_files.kml");
+              };
+            } catch (err) {
+              alert(`Error parsing GPX file "${file.name}": ${err.message}`);
+            }
+          };
+          reader.onerror = function () {
+            alert(`Error reading file "${file.name}"`);
+          };
+          reader.readAsText(file);
+        }
+      });
+
+      document.getElementById("resetButton").addEventListener("click", function () {
+        resetMap();
+      });
+    });
+  </script>
+</body>
+
+</html>
